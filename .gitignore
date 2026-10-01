@@ -1,0 +1,7 @@
+.venv/
+.idea/
+__pycache__/
+*.pyc
+gestao_ria.db
+relatorios_gerados/*.xlsx
+Relatorio_Consolidado_RIA.xlsx
