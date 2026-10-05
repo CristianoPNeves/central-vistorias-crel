@@ -10,6 +10,7 @@ import pandas as pd
 import pypdf
 import requests
 import streamlit as st
+import streamlit.components.v1 as components
 from streamlit_folium import st_folium
 from streamlit_js_eval import get_geolocation
 
@@ -26,6 +27,7 @@ ARQUIVO_GEO_BASE = "clientes_geolocalizados.xlsx"
 PIN_ACESSO = "2026"
 
 os.makedirs(DIR_RELATORIOS, exist_ok=True)
+
 
 # -----------------------------------------------------------------------------
 # 1. CONTROLE DE ACESSO POR PIN
@@ -52,7 +54,9 @@ def autenticar():
                         st.error("PIN incorreto. Acesso restrito.")
         st.stop()
 
+
 autenticar()
+
 
 # -----------------------------------------------------------------------------
 # 2. BANCO DE DADOS & FUNÇÕES GEOGRÁFICAS
@@ -95,9 +99,11 @@ def get_db():
     ''')
     return conexao
 
+
 def normalizar_codigo(texto):
     t = str(texto or '').upper().replace(' ', '').replace('_', '').replace('-', '')
     return ''.join(c for c in unicodedata.normalize('NFD', t) if unicodedata.category(c) != 'Mn')
+
 
 @st.cache_data
 def carregar_base_georreferenciada():
@@ -106,6 +112,7 @@ def carregar_base_georreferenciada():
         df_geo_local['CLI_NORM'] = df_geo_local['CLIENTE'].apply(normalizar_codigo)
         return df_geo_local[['CLI_NORM', 'lat', 'lon']].drop_duplicates(subset=['CLI_NORM'])
     return pd.DataFrame()
+
 
 def buscar_coords_fallback(cep, endereco_padrao=None):
     _ = endereco_padrao
@@ -120,6 +127,7 @@ def buscar_coords_fallback(cep, endereco_padrao=None):
             pass
     return -23.5505, -46.6333
 
+
 def calc_dist_km(lat1, lon1, lat2, lon2):
     raio_terra = 6371.0
     dif_lat = math.radians(lat2 - lat1)
@@ -127,6 +135,7 @@ def calc_dist_km(lat1, lon1, lat2, lon2):
     a_calc = (math.sin(dif_lat / 2) ** 2 +
               math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dif_lon / 2) ** 2)
     return raio_terra * (2 * math.atan2(math.sqrt(a_calc), math.sqrt(1 - a_calc)))
+
 
 # -----------------------------------------------------------------------------
 # 3. EXTRATOR AUTOMÁTICO DE PDF DO SIGA
@@ -188,6 +197,7 @@ def extrair_dados_pdf_siga(pdf_bytes):
                     'VENCTO RIA': vencto
                 })
     return pd.DataFrame(registros)
+
 
 # -----------------------------------------------------------------------------
 # CONSTANTES DO FORMULÁRIO DE VISTORIA
@@ -399,18 +409,21 @@ if menu == "⚙️ 1. Importador & Roteirizador Logístico":
         with f2:
             modo_venc = st.selectbox(
                 "Escopo de Vencimento:",
-                ["Todos (Vencimentos + Sem Data / Pendências)", "Apenas Vencimentos com Data", "Apenas Sem Data / Pendências"]
+                ["Todos (Vencimentos + Sem Data / Pendências)", "Apenas Vencimentos com Data",
+                 "Apenas Sem Data / Pendências"]
             )
 
         df_f = df.copy()
         if excluir_alfa:
             df_f = df_f[~df_f['MARCA_CLEAN'].str.contains('ALFA', na=False)]
 
+
         def classificar_grupo(v):
             v_str = str(v).lower()
             if "sem data" in v_str or "//" in v_str or not re.search(r'\d{2}/\d{2}/\d{4}', v_str):
                 return "Sem Data / Pendência"
             return "Vencimento Programado"
+
 
         df_f['GRUPO_STATUS'] = df_f['VENC_CLEAN'].apply(classificar_grupo)
 
@@ -440,7 +453,7 @@ if menu == "⚙️ 1. Importador & Roteirizador Logístico":
         with c1:
             max_locais_dia = st.slider("Máximo de Locais por Dia:", 3, 15, 7)
         with c2:
-            max_elev_dia = st.slider("Máximo de Elevadores por Dia:", 5, 30, 14)
+            max_elev_dia = st.slider("Máximo de Elevadores por Dia:", 5, 40, 14)
 
         if st.button("🚀 Otimizar Trajetos e Salvar para Campo", type="primary", use_container_width=True):
             if selecionados.empty:
@@ -499,7 +512,8 @@ if menu == "⚙️ 1. Importador & Roteirizador Logístico":
 
                             proximo = min(
                                 candidatos,
-                                key=lambda p_cand: calc_dist_km(atual['lat'], atual['lon'], p_cand['lat'], p_cand['lon']),
+                                key=lambda p_cand: calc_dist_km(atual['lat'], atual['lon'], p_cand['lat'],
+                                                                p_cand['lon']),
                             )
                             pontos_restantes.remove(proximo)
                             parada_num += 1
@@ -519,26 +533,91 @@ if menu == "⚙️ 1. Importador & Roteirizador Logístico":
                             INSERT INTO rotas_ativas 
                             (id, mes_exec, dia_rota, ordem_parada, cliente, cep, endereco, qtd_elev, marca, vencto_ria, grupo_status, lat, lon, waze_url, status_vistoria)
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pendente')
-                        ''', (uid, p_item['vencto_ria'], p_item['dia_rota'], p_item['ordem_parada'], p_item['cliente'], p_item['cep'],
-                              p_item['endereco'], p_item['qtd_elev'], p_item['marca'], p_item['vencto_ria'], p_item['grupo_status'], p_item['lat'],
+                        ''', (uid, p_item['vencto_ria'], p_item['dia_rota'], p_item['ordem_parada'], p_item['cliente'],
+                              p_item['cep'],
+                              p_item['endereco'], p_item['qtd_elev'], p_item['marca'], p_item['vencto_ria'],
+                              p_item['grupo_status'], p_item['lat'],
                               p_item['lon'], p_item['waze_url']))
                     conexao_db.commit()
                     conexao_db.close()
 
-                    st.success(f"✅ Roteirização concluída! {len(rotas_finais)} locais distribuídos em {dia_num - 1} jornadas diárias.")
+                    st.success(
+                        f"✅ Roteirização concluída! {len(rotas_finais)} locais distribuídos em {dia_num - 1} jornadas diárias.")
 
 # =============================================================================
-# ETAPA 2: RELATÓRIOS & PAINEL DO GESTOR
+# ETAPA 2: RELATÓRIOS & PAINEL DO GESTOR (COM IMPRESSÃO / SALVAR EM PDF)
 # =============================================================================
 elif menu == "📄 2. Relatórios & Painel do Gestor":
     st.title("📄 Painel do Gestor — Roteiros & Relatórios de Vistoria")
+
+    st.markdown("""
+    <style>
+    @media print {
+        header, footer, [data-testid="stSidebar"], [data-testid="stHeader"], 
+        .stButton, [data-testid="stDownloadButton"], iframe, .no-print {
+            display: none !important;
+        }
+        html, body, [data-testid="stAppViewContainer"], [data-testid="stMainBlockContainer"], section.main {
+            overflow: visible !important;
+            height: auto !important;
+            position: static !important;
+            padding: 0 !important;
+            margin: 0 !important;
+        }
+        @page {
+            size: A4 portrait;
+            margin: 10mm;
+        }
+        table {
+            width: 100% !important;
+            border-collapse: collapse !important;
+            page-break-inside: auto !important;
+        }
+        tr {
+            page-break-inside: avoid !important;
+        }
+        th, td {
+            border: 1px solid #777 !important;
+            padding: 5px 7px !important;
+            font-size: 11px !important;
+        }
+        th {
+            background-color: #1B365D !important;
+            color: white !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+    }
+    .tabela-rel-doc {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 10px;
+        margin-bottom: 20px;
+        font-family: Arial, sans-serif;
+    }
+    .tabela-rel-doc th, .tabela-rel-doc td {
+        border: 1px solid #ccc;
+        padding: 6px 8px;
+        font-size: 12px;
+    }
+    .tabela-rel-doc th {
+        background-color: #1B365D;
+        color: white;
+        text-align: left;
+    }
+    .tabela-rel-doc tr:nth-child(even) {
+        background-color: #f8f9fa;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
     conexao_gestor = get_db()
     df_rel = pd.read_sql("SELECT * FROM rotas_ativas", conexao_gestor)
     df_vistorias_db = pd.read_sql("SELECT * FROM relatorios_vistorias", conexao_gestor)
     conexao_gestor.close()
 
-    tab_roteiro, tab_vistorias_salvas = st.tabs(["🗺️ Roteiro Operacional (Impressão/Excel)", "📥 Relatórios Técnicos Concluídos"])
+    tab_roteiro, tab_vistorias_salvas = st.tabs(
+        ["🗺️ Roteiro Operacional (Impressão/Excel)", "📥 Relatórios Técnicos Concluídos"])
 
     with tab_roteiro:
         if not df_rel.empty:
@@ -559,16 +638,17 @@ elif menu == "📄 2. Relatórios & Painel do Gestor":
                 df_rel.to_excel(buffer, index=False, sheet_name="Roteiro_Geral")
                 buffer.close()
                 with open("Relatorio_Consolidado_RIA.xlsx", "rb") as f_excel:
-                    st.download_button("📥 Baixar Roteiro em Excel", f_excel, "Relatorio_Consolidado_RIA.xlsx", use_container_width=True)
+                    st.download_button("📥 Baixar Roteiro em Excel", f_excel, "Relatorio_Consolidado_RIA.xlsx",
+                                       use_container_width=True)
 
             with col2:
-                import streamlit.components.v1 as components
                 components.html("""
                 <button onclick="window.parent.print()" style="
                     width: 100%; height: 42px; background-color: #1B365D; color: #ffffff;
                     border: none; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer;
                 ">🖨️ Imprimir / Salvar em PDF (Página Inteira)</button>
                 """, height=50)
+
 
             def renderizar_tabela_html(df_sub):
                 linhas = []
@@ -604,6 +684,7 @@ elif menu == "📄 2. Relatórios & Painel do Gestor":
                     "</table>"
                 )
 
+
             df_out = df_rel[df_rel['grupo_status'] == 'Vencimento Programado']
             if not df_out.empty:
                 st.markdown(f"#### 1. Vistorias com Vencimento Programado ({len(df_out)} locais)")
@@ -615,27 +696,81 @@ elif menu == "📄 2. Relatórios & Painel do Gestor":
                 st.html(renderizar_tabela_html(df_sem))
 
     with tab_vistorias_salvas:
-        st.subheader("📁 Vistorias Concluídas em Campo")
+        st.subheader("📁 Vistorias Técnicas Concluídas")
         if df_vistorias_db.empty:
             st.info("Nenhuma vistoria técnica finalizada até o momento.")
         else:
-            st.dataframe(df_vistorias_db[['cliente', 'endereco', 'data_vistoria', 'vistoriador', 'qtd_normas_orc', 'qtd_pendencias_sup']], use_container_width=True)
+            st.dataframe(df_vistorias_db[['cliente', 'endereco', 'data_vistoria', 'vistoriador', 'qtd_normas_orc',
+                                          'qtd_pendencias_sup']], use_container_width=True)
             st.markdown("---")
-            st.markdown("#### ⬇️ Download dos Relatórios Consolidados em Excel")
-            for _, v_row in df_vistorias_db.iterrows():
-                arq_path = v_row['caminho_arquivo']
-                if os.path.exists(arq_path):
-                    with open(arq_path, "rb") as f_down:
+
+            opcoes_vistorias = {
+                f"{r['cliente']} - {r['data_vistoria']} ({r['id_rota']})": r['caminho_arquivo']
+                for _, r in df_vistorias_db.iterrows()
+            }
+
+            escolha_rel = st.selectbox("Selecione a Vistoria para Visualizar, Imprimir ou Salvar em PDF:",
+                                       list(opcoes_vistorias.keys()))
+            caminho_escolhido = opcoes_vistorias[escolha_rel]
+
+            if os.path.exists(caminho_escolhido):
+                col_btn_print, col_btn_xls = st.columns(2)
+                with col_btn_print:
+                    components.html("""
+                    <button onclick="window.parent.print()" style="
+                        width: 100%; height: 42px; background-color: #1B365D; color: #ffffff;
+                        border: none; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer;
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+                    ">🖨️ Imprimir / Salvar Relatório em PDF</button>
+                    """, height=50)
+
+                with col_btn_xls:
+                    with open(caminho_escolhido, "rb") as f_down:
                         st.download_button(
-                            label=f"📥 Baixar Pasta Excel: {v_row['cliente']} ({v_row['data_vistoria']})",
+                            label="📥 Baixar Pasta Excel (.xlsx)",
                             data=f_down,
-                            file_name=os.path.basename(arq_path),
-                            key=f"btn_dl_{v_row['id_rota']}",
+                            file_name=os.path.basename(caminho_escolhido),
                             use_container_width=True
                         )
 
+                xls = pd.ExcelFile(caminho_escolhido)
+                df_id_elev = pd.read_excel(xls, sheet_name="Elevadores_Identificacao")
+                df_orc_normas = pd.read_excel(xls, sheet_name="Orcamento_Normas")
+                df_prev_matriz = pd.read_excel(xls, sheet_name="Manutencao_Preventiva")
+                df_sup_pend = pd.read_excel(xls, sheet_name="Supervisao_Pendencias")
+
+                st.markdown(f"""
+                <div style="border-bottom: 2px solid #1B365D; padding-bottom: 8px; margin-top: 20px; margin-bottom: 15px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <h2 style="color:#1B365D; margin:0;">RELATÓRIO TÉCNICO DE VISTORIA — RIA</h2>
+                        <span style="font-weight:bold; color:#555;">CREL ELEVADORES</span>
+                    </div>
+                    <p style="margin:5px 0 0 0; color:#333; font-size:14px;">
+                        <b>Edifício:</b> {escolha_rel.split(' - ')[0]} | <b>Data:</b> {escolha_rel.split(' - ')[1].split(' (')[0]}
+                    </p>
+                </div>
+                """, unsafe_allow_html=True)
+
+                st.markdown("##### 1. Identificação dos Elevadores")
+                st.html(df_id_elev.to_html(classes="tabela-rel-doc", index=False))
+
+                st.markdown("##### 2. Itens de Norma Técnica para Orçamento Comercial")
+                if not df_orc_normas.empty:
+                    st.html(df_orc_normas.to_html(classes="tabela-rel-doc", index=False))
+                else:
+                    st.info("Nenhuma não-conformidade de norma técnica que demande orçamento.")
+
+                st.markdown("##### 3. Avaliação de Manutenção Preventiva")
+                st.html(df_prev_matriz.to_html(classes="tabela-rel-doc", index=False))
+
+                st.markdown("##### 4. Apontamentos e Pendências para Supervisão Técnica")
+                if not df_sup_pend.empty:
+                    st.html(df_sup_pend.to_html(classes="tabela-rel-doc", index=False))
+                else:
+                    st.info("Nenhuma pendência ou anomalia operacional apontada.")
+
 # =============================================================================
-# ETAPA 3: TERMINAL DE CAMPO & FORMULÁRIO DE VISTORIA INTEGRADO
+# ETAPA 3: TERMINAL DE CAMPO & FORMULÁRIO DE VISTORIA DINÂMICO
 # =============================================================================
 elif menu == "📱 3. Terminal de Campo (Vistoriador)":
     conexao_campo = get_db()
@@ -659,26 +794,38 @@ elif menu == "📱 3. Terminal de Campo (Vistoriador)":
 
         dados_cli = registro_cliente.iloc[0]
 
-        st.button("⬅️️ Voltar para o Roteiro do Dia", on_click=lambda: st.session_state.update({"vistoria_ativa_id": None}))
+        st.button("⬅ Voltar para o Roteiro do Dia",
+                  on_click=lambda: st.session_state.update({"vistoria_ativa_id": None}))
 
         st.markdown(f"""
         <div style="background:#1B365D; color:white; padding:12px; border-radius:8px; margin-bottom:15px;">
             <h3 style="margin:0; color:white;">🛗 Vistoria Técnica: {dados_cli['cliente']}</h3>
             <p style="margin:4px 0 0 0; font-size:13px; opacity:0.9;">
-                📍 {dados_cli['endereco']} | Marca: {dados_cli['marca']} | Qtd Elevadores: {dados_cli['qtd_elev']}
+                📍 {dados_cli['endereco']} | Marca: {dados_cli['marca']} | Qtd Cadastrada: {dados_cli['qtd_elev']}
             </p>
         </div>
         """, unsafe_allow_html=True)
 
         with st.expander("📋 1. Identificação dos Elevadores (CREL & PMSP)", expanded=True):
-            qtd_carros = min(max(int(dados_cli['qtd_elev']), 1), 4)
-            st.caption(f"Configurando para {qtd_carros} elevador(es) conforme cadastro.")
+            qtd_padrao = max(int(dados_cli['qtd_elev'] or 1), 1)
+            qtd_carros = st.number_input(
+                "Quantidade Total de Elevadores no Edifício:",
+                min_value=1,
+                max_value=30,
+                value=qtd_padrao,
+                step=1,
+                key=f"num_elev_{id_ativa}"
+            )
+
+            # Lista ordenada de todos os carros: C1, C2, ..., Cn
+            todos_carros = [f"C{i + 1}" for i in range(int(qtd_carros))]
 
             dados_elevadores_cad = []
-            cols_cad = st.columns(qtd_carros)
-            for i in range(qtd_carros):
-                c_id = f"C{i+1}"
-                with cols_cad[i]:
+            colunas_por_linha = 4 if len(todos_carros) >= 4 else len(todos_carros)
+            cols_cad = st.columns(colunas_por_linha)
+
+            for i, c_id in enumerate(todos_carros):
+                with cols_cad[i % colunas_por_linha]:
                     st.markdown(f"**Elevador {c_id}**")
                     crel_val = st.text_input(f"Nº CREL ({c_id}):", key=f"crel_{id_ativa}_{c_id}")
                     pmsp_val = st.text_input(f"Nº PMSP ({c_id}):", key=f"pmsp_{id_ativa}_{c_id}")
@@ -686,12 +833,14 @@ elif menu == "📱 3. Terminal de Campo (Vistoriador)":
 
             col_tec, col_sup = st.columns(2)
             with col_tec:
-                nome_vistoriador = st.text_input("Técnico Vistoriador:", value=dados_cli['vistoriador'] or "", key=f"tec_{id_ativa}")
+                nome_vistoriador = st.text_input("Técnico Vistoriador:", value=dados_cli['vistoriador'] or "",
+                                                 key=f"tec_{id_ativa}")
             with col_sup:
                 _nome_supervisor = st.text_input("Supervisor Técnico:", key=f"sup_{id_ativa}")
 
         st.markdown("### 📋 2. Avaliação dos Componentes")
-        st.caption("Legenda ST: BO (Bom) | AC (Acompanhar) | FN (Fora Norma) | RU (Ruim) | NT (Não tem) | NA (Não se aplica)")
+        st.caption(
+            "Legenda ST: BO (Bom) | AC (Acompanhar) | FN (Fora Norma) | RU (Ruim) | NT (Não tem) | NA (Não se aplica)")
         st.caption("Legenda PR: - (Nenhuma) | OR (Orçar) | CA (Enviar carta)")
 
         abas_locais = st.tabs(list(ESTRUTURA_VISTORIA.keys()))
@@ -703,8 +852,7 @@ elif menu == "📱 3. Terminal de Campo (Vistoriador)":
                     with st.expander(f"⚙️ {item_nome}", expanded=True):
                         for ponto in pontos:
                             st.markdown(f"🔹 **{ponto}**")
-                            for c_idx in range(qtd_carros):
-                                c_id = f"C{c_idx+1}"
+                            for c_id in todos_carros:
                                 col_st, col_pr, col_obs = st.columns([1, 1, 2])
 
                                 k_st = f"st_{id_ativa}_{local_nome}_{item_nome}_{ponto}_{c_id}"
@@ -716,7 +864,7 @@ elif menu == "📱 3. Terminal de Campo (Vistoriador)":
                                 with col_pr:
                                     p_val = st.selectbox(f"PR ({c_id}):", OPCOES_PR, index=0, key=k_pr)
                                 with col_obs:
-                                    o_val = st.text_input(f"Obs ({c_id}):", key=k_ob, placeholder="Anotações técnicas")
+                                    o_val = st.text_input(f"Obs ({c_id}):", key=k_ob, placeholder=f"Obs {c_id}")
 
                                 itens_avaliados.append({
                                     "Local": local_nome,
@@ -731,7 +879,8 @@ elif menu == "📱 3. Terminal de Campo (Vistoriador)":
 
         with st.expander("📑 3. Itens de Adequação de Norma Técnica (Orçamento)", expanded=False):
             opcoes_n = [f"{cod} - {loc}: {desc}" for cod, loc, desc in CATALOGO_NORMAS]
-            normas_sel = st.multiselect("Selecione itens de norma para gerar proposta de orçamento:", opcoes_n, key=f"normas_sel_{id_ativa}")
+            normas_sel = st.multiselect("Selecione itens de norma para gerar proposta de orçamento:", opcoes_n,
+                                        key=f"normas_sel_{id_ativa}")
 
             lista_normas_avulsas = []
             for n_str in normas_sel:
@@ -742,8 +891,8 @@ elif menu == "📱 3. Terminal de Campo (Vistoriador)":
                 st.write(f"**Item {n_cod}: {n_desc}**")
                 carros_af = st.multiselect(
                     f"Carros afetados ({n_cod}):",
-                    [f"C{i+1}" for i in range(qtd_carros)],
-                    default=[f"C{i+1}" for i in range(qtd_carros)],
+                    todos_carros,
+                    default=todos_carros,
                     key=f"c_af_{id_ativa}_{n_cod}"
                 )
                 c_st, c_pr = st.columns(2)
@@ -764,7 +913,8 @@ elif menu == "📱 3. Terminal de Campo (Vistoriador)":
                 })
 
         with st.expander("🚨 4. Parecer Geral da Supervisão", expanded=False):
-            parecer_sup = st.text_area("Comentários e Orientações para a Equipe de Manutenção:", key=f"parecer_{id_ativa}")
+            parecer_sup = st.text_area("Comentários e Orientações para a Equipe de Manutenção:",
+                                       key=f"parecer_{id_ativa}")
 
         st.markdown("---")
         if st.button("💾 Finalizar Vistoria e Salvar Relatório", type="primary", use_container_width=True):
@@ -775,6 +925,7 @@ elif menu == "📱 3. Terminal de Campo (Vistoriador)":
             df_norm_rotina["Destino"] = "Orçamento Comercial"
             df_norm_final = pd.concat([df_norm_rotina, pd.DataFrame(lista_normas_avulsas)], ignore_index=True)
 
+            # 2. Relatório de Manutenção Preventiva (Matriz Dinâmica com Ordenação Real de C1 até Cn)
             df_prev_pivot = df_av.pivot_table(
                 index=["Local", "Item", "Ponto de Avaliação"],
                 columns="Elevador",
@@ -782,11 +933,15 @@ elif menu == "📱 3. Terminal de Campo (Vistoriador)":
                 aggfunc="first"
             ).reset_index()
 
+            colunas_ordenadas = ["Local", "Item", "Ponto de Avaliação"] + [c for c in todos_carros if
+                                                                           c in df_prev_pivot.columns]
+            df_prev_pivot = df_prev_pivot.reindex(columns=colunas_ordenadas)
+
             df_sup = df_av[
                 (df_av["Situação (ST)"].isin(["RU", "AC"])) |
                 (df_av["Observações"] != "") |
                 (df_av["Providência (PR)"] == "CA")
-            ].copy()
+                ].copy()
             df_sup["Endereço"] = dados_cli['endereco']
             df_sup["Prioridade"] = df_sup["Situação (ST)"].apply(lambda s: "Alta" if s == "RU" else "Média")
 
@@ -799,7 +954,8 @@ elif menu == "📱 3. Terminal de Campo (Vistoriador)":
                 df_sup = pd.concat([linha_parecer, df_sup], ignore_index=True)
 
             dt_hoje = datetime.datetime.now().strftime("%Y%m%d_%H%M")
-            nome_arquivo_excel = os.path.join(DIR_RELATORIOS, f"Vistoria_{normalizar_codigo(dados_cli['cliente'])}_{dt_hoje}.xlsx")
+            nome_arquivo_excel = os.path.join(DIR_RELATORIOS,
+                                              f"Vistoria_{normalizar_codigo(dados_cli['cliente'])}_{dt_hoje}.xlsx")
             with pd.ExcelWriter(nome_arquivo_excel, engine="openpyxl") as writer:
                 pd.DataFrame(dados_elevadores_cad).to_excel(writer, sheet_name="Elevadores_Identificacao", index=False)
                 df_norm_final.to_excel(writer, sheet_name="Orcamento_Normas", index=False)
@@ -818,7 +974,8 @@ elif menu == "📱 3. Terminal de Campo (Vistoriador)":
                 INSERT OR REPLACE INTO relatorios_vistorias
                 (id_rota, cliente, endereco, data_vistoria, vistoriador, caminho_arquivo, qtd_normas_orc, qtd_pendencias_sup)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (id_ativa, dados_cli['cliente'], dados_cli['endereco'], data_str, nome_vistoriador, nome_arquivo_excel, len(df_norm_final), len(df_sup)))
+            ''', (id_ativa, dados_cli['cliente'], dados_cli['endereco'], data_str, nome_vistoriador, nome_arquivo_excel,
+                  len(df_norm_final), len(df_sup)))
             conexao_salvar.commit()
             conexao_salvar.close()
 
@@ -864,7 +1021,8 @@ elif menu == "📱 3. Terminal de Campo (Vistoriador)":
                 cor = "green" if r_mapa['status_vistoria'] == "Concluído" else (
                     "red" if r_mapa['status_vistoria'] == "Improdutiva" else "blue")
                 folium.Marker(p_coord, popup=f"#{r_mapa['ordem_parada']} - {r_mapa['cliente']}<br>{r_mapa['endereco']}",
-                              tooltip=f"#{r_mapa['ordem_parada']} {r_mapa['cliente']}", icon=folium.Icon(color=cor)).add_to(mapa)
+                              tooltip=f"#{r_mapa['ordem_parada']} {r_mapa['cliente']}",
+                              icon=folium.Icon(color=cor)).add_to(mapa)
 
             if len(coords) > 1:
                 folium.PolyLine(coords, color="#1B365D", weight=4, dash_array="6, 8").add_to(mapa)
@@ -892,7 +1050,8 @@ elif menu == "📱 3. Terminal de Campo (Vistoriador)":
             with b1:
                 st.link_button("🚗 Waze", row_parada['waze_url'], use_container_width=True)
             with b2:
-                if st.button("📝 Fazer Vistoria", key=f"vistoria_btn_{row_parada['id']}", type="primary", use_container_width=True):
+                if st.button("📝 Fazer Vistoria", key=f"vistoria_btn_{row_parada['id']}", type="primary",
+                             use_container_width=True):
                     st.session_state["vistoria_ativa_id"] = row_parada['id']
                     st.rerun()
             with b3:
